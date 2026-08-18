@@ -1,0 +1,234 @@
+name: estatelink
+
+services:
+
+  # ── Infra ─────────────────────────────────────────────────────────────
+  db:
+    image: postgres:16-alpine
+    container_name: estatelink_db
+    environment:
+      POSTGRES_DB: estatelink
+      POSTGRES_USER: ${DATABASE_USERNAME}
+      POSTGRES_PASSWORD: ${DATABASE_PASSWORD}
+    ports:
+      - "5433:5432"
+    volumes:
+      - db_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${DATABASE_USERNAME} -d estatelink"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  zookeeper:
+    image: confluentinc/cp-zookeeper:7.5.0
+    container_name: estatelink_zookeeper
+    environment:
+      ZOOKEEPER_CLIENT_PORT: 2181
+      ZOOKEEPER_TICK_TIME: 2000
+    ports:
+      - "2181:2181"
+
+  kafka:
+    image: confluentinc/cp-kafka:7.3.0
+    container_name: estatelink_kafka
+    depends_on:
+      - zookeeper
+    ports:
+      - "9093:9093"
+    environment:
+      KAFKA_BROKER_ID: 1
+      KAFKA_ZOOKEEPER_CONNECT: zookeeper:2181
+      KAFKA_ADVERTISED_LISTENERS: PLAINTEXT://kafka:9092,PLAINTEXT_HOST://localhost:9093
+      KAFKA_LISTENER_SECURITY_PROTOCOL_MAP: PLAINTEXT:PLAINTEXT,PLAINTEXT_HOST:PLAINTEXT
+      KAFKA_INTER_BROKER_LISTENER_NAME: PLAINTEXT
+      KAFKA_OFFSETS_TOPIC_REPLICATION_FACTOR: 1
+      KAFKA_TRANSACTION_STATE_LOG_MIN_ISR: 1
+      KAFKA_TRANSACTION_STATE_LOG_REPLICATION_FACTOR: 1
+
+  # ── Discovery + gateway ────────────────────────────────────────────────
+  eureka-server:
+    build:
+      context: .
+      dockerfile: Dockerfile
+      args:
+        MODULE: eureka-server
+        PORT: 8761
+    container_name: estatelink_eureka
+    environment:
+      SPRING_AUTOCONFIGURE_EXCLUDE: org.springframework.boot.autoconfigure.security.servlet.SecurityAutoConfiguration,org.springframework.boot.actuate.autoconfigure.security.servlet.ManagementWebSecurityAutoConfiguration
+    ports:
+      - "8761:8761"
+
+  api-gateway:
+    build:
+      context: ./api-gateway
+      dockerfile: Dockerfile
+    container_name: estatelink_gateway
+    environment:
+      JWT_SECRET: ${JWT_SECRET}
+      EUREKA_URL: http://eureka-server:8761/eureka
+    ports:
+      - "9090:9090"
+    depends_on:
+      - eureka-server
+    healthcheck:
+      test: ["CMD", "curl", "-fsS", "http://localhost:9090/actuator/health"]
+      interval: 10s
+      timeout: 5s
+      retries: 12
+      start_period: 20s
+
+  # ── Microservices ──────────────────────────────────────────────────────
+  user-service:
+    build:
+      context: .
+      dockerfile: Dockerfile
+      args:
+        MODULE: user-service
+        PORT: 8081
+    container_name: estatelink_user_service
+    env_file:
+      - .env
+    environment:
+      DATABASE_URI: jdbc:postgresql://db:5432/estatelink
+      KAFKA_BOOTSTRAP_SERVERS: kafka:9092
+      EUREKA_DEFAULT_ZONE: http://eureka-server:8761/eureka/
+    depends_on:
+      db:
+        condition: service_healthy
+      kafka:
+        condition: service_started
+      eureka-server:
+        condition: service_started
+
+  property-service:
+    build:
+      context: .
+      dockerfile: Dockerfile
+      args:
+        MODULE: property-service
+        PORT: 8082
+    container_name: estatelink_property_service
+    env_file:
+      - .env
+    environment:
+      DATABASE_URI: jdbc:postgresql://db:5432/estatelink
+      KAFKA_BOOTSTRAP_SERVERS: kafka:9092
+      EUREKA_DEFAULT_ZONE: http://eureka-server:8761/eureka/
+      APP_BASE_URL: http://localhost
+      UPLOAD_DIR: /app/uploads
+    volumes:
+      - uploads_data:/app/uploads
+    depends_on:
+      db:
+        condition: service_healthy
+      kafka:
+        condition: service_started
+      eureka-server:
+        condition: service_started
+
+  inspection-service:
+    build:
+      context: .
+      dockerfile: Dockerfile
+      args:
+        MODULE: inspection-service
+        PORT: 8083
+    container_name: estatelink_inspection_service
+    env_file:
+      - .env
+    environment:
+      DATABASE_URI: jdbc:postgresql://db:5432/estatelink
+      KAFKA_BOOTSTRAP_SERVERS: kafka:9092
+      EUREKA_DEFAULT_ZONE: http://eureka-server:8761/eureka/
+    depends_on:
+      db:
+        condition: service_healthy
+      kafka:
+        condition: service_started
+      eureka-server:
+        condition: service_started
+
+  offer-service:
+    build:
+      context: .
+      dockerfile: Dockerfile
+      args:
+        MODULE: offer-service
+        PORT: 8084
+    container_name: estatelink_offer_service
+    env_file:
+      - .env
+    environment:
+      DATABASE_URI: jdbc:postgresql://db:5432/estatelink
+      KAFKA_BOOTSTRAP_SERVERS: kafka:9092
+      EUREKA_DEFAULT_ZONE: http://eureka-server:8761/eureka/
+    depends_on:
+      db:
+        condition: service_healthy
+      kafka:
+        condition: service_started
+      eureka-server:
+        condition: service_started
+
+  notification-service:
+    build:
+      context: .
+      dockerfile: Dockerfile
+      args:
+        MODULE: notification-service
+        PORT: 8085
+    container_name: estatelink_notification_service
+    env_file:
+      - .env
+    environment:
+      KAFKA_BOOTSTRAP_SERVERS: kafka:9092
+      EUREKA_DEFAULT_ZONE: http://eureka-server:8761/eureka/
+      USER_SERVICE_URL: http://user-service:8081
+      APP_BASE_URL: http://localhost
+    depends_on:
+      kafka:
+        condition: service_started
+      eureka-server:
+        condition: service_started
+      user-service:
+        condition: service_started
+
+  analytics-service:
+    build:
+      context: .
+      dockerfile: Dockerfile
+      args:
+        MODULE: analytics-service
+        PORT: 8086
+    container_name: estatelink_analytics_service
+    env_file:
+      - .env
+    environment:
+      DATABASE_URI: jdbc:postgresql://db:5432/estatelink
+      KAFKA_BOOTSTRAP_SERVERS: kafka:9092
+      EUREKA_DEFAULT_ZONE: http://eureka-server:8761/eureka/
+    depends_on:
+      db:
+        condition: service_healthy
+      kafka:
+        condition: service_started
+      eureka-server:
+        condition: service_started
+
+  # ── Frontend ───────────────────────────────────────────────────────────
+  frontend:
+    build:
+      context: ./frontend
+      dockerfile: Dockerfile
+    container_name: estatelink_frontend
+    ports:
+      - "80:80"
+    depends_on:
+      api-gateway:
+        condition: service_healthy
+
+volumes:
+  db_data:
+  uploads_data:

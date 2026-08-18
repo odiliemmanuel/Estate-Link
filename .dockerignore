@@ -1,0 +1,12 @@
+.git
+.gitignore
+.idea
+*.iml
+
+**/target
+**/.m2
+**/node_modules
+**/*.log
+
+out
+generated

@@ -1,0 +1,15 @@
+html {
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+}
+
+a {
+  color: inherit;
+}
+
+/* Luxurious but restrained image treatment for listing/property cards. */
+img.estatelink-media {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+}

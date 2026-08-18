@@ -1,0 +1,36 @@
+# Environment variables — real values live only on disk, never in git.
+# Commit the *.env.example templates instead (they contain placeholders).
+.env
+.env.local
+.env.*.local
+.env.prod
+.env.dev
+
+# IDE
+.idea/
+.vscode/
+*.swp
+*.swo
+*~
+.DS_Store
+*.iml
+
+# Build
+target/
+*.class
+*.jar
+*.war
+*.ear
+
+# Maven
+.m2/
+dependency-reduced-pom.xml
+
+# Log files
+*.log
+logs/
+
+# Temporary files
+temp/
+tmp/
+

@@ -1,0 +1,19 @@
+services:
+  user-service:
+    build:
+      context: ..
+      dockerfile: user-service/Dockerfile
+    container_name: estatelink_user_service
+    ports:
+      - "8081:8081"
+    env_file:
+      - ../.env
+    environment:
+      SPRING_KAFKA_BOOTSTRAP_SERVERS: kafka:9092
+    networks:
+      - estatelink_default
+
+
+networks:
+  estatelink_default:
+    external: true

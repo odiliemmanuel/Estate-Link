@@ -1,0 +1,16 @@
+services:
+  property-service:
+    build:
+      context: ..
+      dockerfile: property-service/Dockerfile
+    container_name: estatelink_property_service
+    ports:
+      - "8082:8082"
+    env_file:
+      - ../.env
+    environment:
+      SPRING_KAFKA_BOOTSTRAP_SERVERS: kafka:9092
+      DATABASE_URI: jdbc:postgresql://property-db:5432/property_db
+      DATABASE_USERNAME: ${DATABASE_USERNAME}
+      DATABASE_PASSWORD: ${DATABASE_PASSWORD}
+      APP_BASE_URL: http://localhost:8082

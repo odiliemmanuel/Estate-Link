@@ -1,0 +1,15 @@
+services:
+  notification-service:
+    build:
+      context: ..
+      dockerfile: notification-service/Dockerfile
+    container_name: estatelink_notification_service
+    ports:
+      - "8085:8085"
+    env_file:
+      - ../.env
+    environment:
+      SPRING_KAFKA_BOOTSTRAP_SERVERS: kafka:9092
+      MAIL_USER: ${MAIL_USER}
+      MAIL_PASS: ${MAIL_PASS}
+      APP_BASE_URL: http://localhost:8081

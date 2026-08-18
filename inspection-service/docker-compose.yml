@@ -1,0 +1,15 @@
+services:
+  inspection-service:
+    build:
+      context: ..
+      dockerfile: inspection-service/Dockerfile
+    container_name: estatelink_inspection_service
+    ports:
+      - "8083:8083"
+    env_file:
+      - ../.env
+    environment:
+      SPRING_KAFKA_BOOTSTRAP_SERVERS: kafka:9092
+      DATABASE_URI: jdbc:postgresql://inspection-db:5432/inspection_db
+      DATABASE_USERNAME: ${DATABASE_USERNAME}
+      DATABASE_PASSWORD: ${DATABASE_PASSWORD}
