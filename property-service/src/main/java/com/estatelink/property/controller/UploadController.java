@@ -1,5 +1,7 @@
 package com.estatelink.property.controller;
 
+import com.cloudinary.Cloudinary;
+import com.cloudinary.utils.ObjectUtils;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.MediaType;
@@ -16,15 +18,10 @@ import java.nio.file.Files;
 import java.nio.file.Path;
 import java.nio.file.StandardCopyOption;
 import java.util.Map;
+import java.util.Optional;
 import java.util.Set;
 import java.util.UUID;
 
-/**
- * Accepts image uploads (JWT required, enforced by SecurityConfig). Files are
- * stored on a local volume and served back as static resources at
- * /api/v1/uploads/{filename}; the returned relative URL is stored in a
- * property's imageUrls, so pasted external URLs and uploads behave the same.
- */
 @RestController
 @RequestMapping("/api/v1/uploads")
 public class UploadController {
@@ -33,9 +30,13 @@ public class UploadController {
     private static final Set<String> ALLOWED_EXTENSIONS =
             Set.of("png", "jpg", "jpeg", "gif", "webp");
 
+    private final Optional<Cloudinary> cloudinary;
     private final Path uploadDir;
 
-    public UploadController(@Value("${upload.dir:${java.io.tmpdir}/estatelink-uploads}") String uploadDir) {
+    public UploadController(
+            Optional<Cloudinary> cloudinary,
+            @Value("${upload.dir:${java.io.tmpdir}/estatelink-uploads}") String uploadDir) {
+        this.cloudinary = cloudinary;
         this.uploadDir = Path.of(uploadDir).toAbsolutePath().normalize();
         try {
             Files.createDirectories(this.uploadDir);
@@ -59,6 +60,27 @@ public class UploadController {
                     .body(Map.of("error", "Unsupported image type. Use PNG, JPG, JPEG, GIF or WEBP."));
         }
 
+        if (cloudinary.isPresent()) {
+            return uploadToCloudinary(file);
+        }
+        return uploadLocal(file, extension);
+    }
+
+    private ResponseEntity<Map<String, String>> uploadToCloudinary(MultipartFile file) {
+        try {
+            @SuppressWarnings("unchecked")
+            Map<String, Object> result = cloudinary.get().uploader().upload(
+                    file.getBytes(),
+                    ObjectUtils.asMap("folder", "estatelink"));
+            String url = (String) result.get("secure_url");
+            return ResponseEntity.status(HttpStatus.CREATED).body(Map.of("url", url));
+        } catch (IOException e) {
+            return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR)
+                    .body(Map.of("error", "Could not upload to Cloudinary. Please try again."));
+        }
+    }
+
+    private ResponseEntity<Map<String, String>> uploadLocal(MultipartFile file, String extension) {
         String filename = UUID.randomUUID() + "." + extension;
         Path target = uploadDir.resolve(filename).normalize();
         try {
@@ -67,7 +89,6 @@ public class UploadController {
             return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR)
                     .body(Map.of("error", "Could not save the image. Please try again."));
         }
-
         return ResponseEntity.status(HttpStatus.CREATED).body(Map.of("url", "/api/v1/uploads/" + filename));
     }
 
